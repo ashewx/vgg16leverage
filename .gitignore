@@ -70,7 +70,7 @@ docs/_build/
 target/
 
 # NumPy
-.npy
+*.npy
 
 # Jupyter Notebook
 .ipynb_checkpoints
