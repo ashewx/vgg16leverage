@@ -32,6 +32,9 @@ from tensorflow.python.platform import test
 from vgg16mentor import Mentor
 import tensorflow as tf
 
+cluster = tf.train.ClusterSpec({"local": ["localhost:2222", "localhost:2223"]})
+server1 = tf.train.Server(cluster, job_name="local", task_index=0)
+
 batch_size = 45
 image_height = 224
 image_width = 224
@@ -95,13 +98,14 @@ class GraphPlacerTest():
           l2_cache_size=1572864, #1.5 MB
           shared_memory_size_per_multiprocessor=49152, #49152 bytes
           memory_size=12884901888, # 12GB
-          bandwidth=288000000) #288 GBps
-      for i in range(num_gpus):
-        devices.append(
-            device_properties_pb2.NamedDevice(
-                properties=device_properties, name='/GPU:' + str(i)))
+          bandwidth=288000000) #288 GBps)
+      devices.append(
+        device_properties_pb2.NamedDevice(
+            properties=device_properties, name='/job:local/task:0/device:GPU:0'))
+      devices.append(
+        device_properties_pb2.NamedDevice(
+            properties=device_properties, name='/job:local/task:1/device:GPU:0'))
 
-    assert num_cpus > 0
     device_properties = device_properties_pb2.DeviceProperties(
         type='CPU',
         frequency=2399,
@@ -109,12 +113,14 @@ class GraphPlacerTest():
         l1_cache_size=32768,
         l2_cache_size=262144,
         l3_cache_size=20971520)
-    for i in range(num_cpus):
-      devices.append(
-          device_properties_pb2.NamedDevice(
-              properties=device_properties, name='/CPU:' + str(i)))
+    devices.append(
+      device_properties_pb2.NamedDevice(
+          properties=device_properties, name='/job:local/task:0/device:CPU:0'))
+    devices.append(
+      device_properties_pb2.NamedDevice(
+          properties=device_properties, name='/job:local/task:1/device:CPU:0'))
 
-    return cluster.Cluster(devices=devices)
+    return clusters.Cluster(devices=devices)
 
   @staticmethod
   def get_mentor_variables_to_restore():
