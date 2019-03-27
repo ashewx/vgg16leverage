@@ -22,7 +22,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import meta_graph
 from tensorflow.python.framework import ops as tf_ops
-from tensorflow.python.grappler import cluster
+from tensorflow.python.grappler import cluster as clusters
 from tensorflow.python.grappler import graph_placer
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
@@ -32,7 +32,7 @@ from tensorflow.python.platform import test
 from nets import vgg
 import tensorflow as tf
 
-cluster = tf.train.ClusterSpec({"local": ["172.23.10.2:2222", "172.23.10.6:2223"]})
+cluster = tf.train.ClusterSpec({"local": ["172.23.10.3:2222", "172.23.10.4:2223"]})
 server1 = tf.train.Server(cluster, job_name="local", task_index=0)
 
 class GraphPlacerTest():
