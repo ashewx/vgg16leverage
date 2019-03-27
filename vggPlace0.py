@@ -22,62 +22,44 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import meta_graph
 from tensorflow.python.framework import ops as tf_ops
-from tensorflow.python.grappler import cluster as clusters
+from tensorflow.python.grappler import cluster
 from tensorflow.python.grappler import graph_placer
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.platform import test
-from vgg16mentor import Mentor
+from nets import vgg
 import tensorflow as tf
 
 cluster = tf.train.ClusterSpec({"local": ["172.23.10.2:2222", "172.23.10.6:2223"]})
 server1 = tf.train.Server(cluster, job_name="local", task_index=0)
 
-batch_size = 45
-image_height = 224
-image_width = 224
-num_channels = 3
-num_classes = 102
-temp_softmax = 1
-seed = 1234
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 5853
-LEARNING_RATE_DECAY_FACTOR = 0.9809
-NUM_EPOCHS_PER_DECAY = 1.0
-learning_rate = 0.0001
-learning_rate_pretrained = 0.0001
-
 class GraphPlacerTest():
 
   @staticmethod
   def _buildVgg():
-    mentor = Mentor(True)
     g = tf.Graph()
 
+    train_batch_size = 2
+    eval_batch_size = 1
+    train_height, train_width = 224, 224
+    eval_height, eval_width = 256, 256
+    num_classes = 1000
     with g.as_default():
-      config = tf.ConfigProto(gpu_options = tf.GPUOptions(allow_growth = True))
-      ## set the seed so that we have same loss values and initializations for every run.
-      tf.set_random_seed(seed)
-      images_placeholder, labels_placeholder = GraphPlacerTest.placeholder_inputs(batch_size)
-      sess = tf.Session(config = config)
-      coord = tf.train.Coordinator()
-      global_step = tf.Variable(0, name='global_step', trainable=True)
-      phase_train = tf.placeholder(tf.bool, name = 'phase_train')
-
-      num_batches_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / batch_size
-      decay_steps = int(num_batches_per_epoch * NUM_EPOCHS_PER_DECAY)
-      mentor_data_dict = mentor.build(images_placeholder, num_classes, temp_softmax, phase_train)
-      loss = mentor.loss(labels_placeholder)
-      lr = tf.train.exponential_decay(learning_rate,global_step, decay_steps,LEARNING_RATE_DECAY_FACTOR,staircase=True)
-
-      variables_to_restore = GraphPlacerTest.get_mentor_variables_to_restore()
-      train_op = mentor.training(loss, learning_rate_pretrained, lr, global_step, variables_to_restore,mentor.get_training_vars())
-      softmax = mentor_data_dict.softmax
-      init = tf.global_variables_initializer()
+      train_inputs = tf.random_uniform(
+          (train_batch_size, train_height, train_width, 3))
+      logits, _ = vgg.vgg_16(train_inputs)
+      tf.get_variable_scope().reuse_variables()
+      eval_inputs = tf.random_uniform(
+          (eval_batch_size, eval_height, eval_width, 3))
+      logits, _ = vgg.vgg_16(eval_inputs, is_training=False,
+                             spatial_squeeze=False)
+      logits = tf.reduce_mean(logits, [1, 2])
+      predictions = tf.argmax(logits, 1)
 
     train_op = g.get_collection_ref(tf_ops.GraphKeys.TRAIN_OP)
-    train_op.append(init)
+    train_op.append(predictions)
     return g
 
   @staticmethod
@@ -121,33 +103,6 @@ class GraphPlacerTest():
           properties=device_properties, name='/job:local/task:1/device:CPU:0'))
 
     return clusters.Cluster(devices=devices)
-
-  @staticmethod
-  def get_mentor_variables_to_restore():
-    """
-    Returns:: names of the weights and biases of the teacher model
-    """
-    return [var for var in tf.global_variables() if var.op.name.startswith("mentor") and (var.op.name.endswith("biases") or var.op.name.endswith("weights")) and (var.op.name != ("mentor_fc3/mentor_weights") and var.op.name != ("mentor_fc3/mentor_biases"))]
-
-### placeholders to hold iamges and their labels of certain datasets
-  @staticmethod
-  def placeholder_inputs(batch_size):
-    """
-      Args:
-        batch_size: batch size used to train the network
-
-      Returns:
-        images_placeholder: images_placeholder holds images of either caltech101 or cifar10 datasets
-        labels_placeholder: labels_placeholder holds labels of either caltech101 or cifar10 datasets
-
-    """
-    images_placeholder = tf.placeholder(tf.float32,
-                                          shape=(batch_size, image_height,
-                                                     image_width, num_channels))
-    labels_placeholder = tf.placeholder(tf.int32,
-                                          shape=(batch_size))
-
-    return images_placeholder, labels_placeholder
 
   def testBuild(self):
     graph = GraphPlacerTest._buildVgg()
